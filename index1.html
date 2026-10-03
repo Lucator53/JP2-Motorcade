@@ -1,0 +1,1133 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Motorcade Route Map and Simulation</title>
+
+  <!-- Leaflet CSS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <!-- Font Awesome for Icons -->
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css" />
+
+  <style>
+    :root {
+      --primary-color: #1e3a8a;
+      --accent-color: #2563eb;
+      --success-color: #16a34a;
+      --warning-color: #ea580c;
+      --danger-color: #dc2626;
+      --church-color: #7c3aed;
+      --bg-surface: #ffffff;
+      --text-main: #1f2937;
+      --text-muted: #6b7280;
+      --border-color: #e5e7eb;
+      --shadow-lg: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Oxygen, Ubuntu, Cantarell, "Open Sans", "Helvetica Neue", sans-serif;
+    }
+
+    body,
+    html {
+      height: 100%;
+      width: 100%;
+      overflow: hidden;
+      color: var(--text-main);
+      background-color: #f3f4f6;
+    }
+
+    #app-container {
+      display: flex;
+      height: 100%;
+      width: 100%;
+      position: relative;
+    }
+
+    #map {
+      flex: 1;
+      height: 100%;
+      width: 100%;
+      z-index: 1;
+    }
+
+    /* Floating Control Panel */
+    #sidebar {
+      position: absolute;
+      top: 16px;
+      left: 16px;
+      width: 390px;
+      max-height: calc(100% - 32px);
+      background: rgba(255, 255, 255, 0.96);
+      backdrop-filter: blur(8px);
+      border-radius: 14px;
+      box-shadow: var(--shadow-lg);
+      z-index: 1000;
+      display: flex;
+      flex-direction: column;
+      border: 1px solid rgba(229, 231, 235, 0.8);
+      transition: transform 0.3s ease;
+    }
+
+    .panel-header {
+      padding: 16px 20px;
+      background: linear-gradient(135deg, #1e3a8a 0%, #2563eb 100%);
+      color: white;
+      border-top-left-radius: 14px;
+      border-top-right-radius: 14px;
+    }
+
+    .panel-header h1 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .panel-header p {
+      font-size: 0.78rem;
+      opacity: 0.9;
+      margin-top: 4px;
+    }
+
+    .panel-content {
+      padding: 16px 20px;
+      overflow-y: auto;
+      flex: 1;
+    }
+
+    /* Status Section */
+    .status-card {
+      background: #f8fafc;
+      border: 1px solid var(--border-color);
+      border-radius: 10px;
+      padding: 12px 14px;
+      margin-bottom: 14px;
+    }
+
+    .status-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: baseline;
+      margin-bottom: 6px;
+    }
+
+    .status-label {
+      font-size: 0.75rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+    }
+
+    .status-value {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: var(--text-main);
+      text-align: right;
+    }
+
+    .status-value.highlight {
+      color: var(--accent-color);
+    }
+
+    .progress-bar-container {
+      width: 100%;
+      height: 7px;
+      background-color: #e2e8f0;
+      border-radius: 9999px;
+      overflow: hidden;
+      margin-top: 8px;
+    }
+
+    .progress-bar-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #2563eb, #10b981);
+      transition: width 0.3s ease;
+    }
+
+    /* Simulation Control Buttons */
+    .controls-grid {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .btn {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 9px 12px;
+      font-size: 0.85rem;
+      font-weight: 600;
+      border-radius: 8px;
+      border: none;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .btn-primary {
+      background-color: var(--accent-color);
+      color: white;
+    }
+
+    .btn-primary:hover:not(:disabled) {
+      background-color: #1d4ed8;
+    }
+
+    .btn-warning {
+      background-color: #f59e0b;
+      color: white;
+    }
+
+    .btn-warning:hover:not(:disabled) {
+      background-color: #d97706;
+    }
+
+    .btn-secondary {
+      background-color: #64748b;
+      color: white;
+    }
+
+    .btn-secondary:hover:not(:disabled) {
+      background-color: #475569;
+    }
+
+    /* Speed Controls */
+    .speed-container {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 14px;
+      background: #f1f5f9;
+      padding: 6px 8px;
+      border-radius: 8px;
+    }
+
+    .speed-label {
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: var(--text-muted);
+      padding-left: 4px;
+    }
+
+    .speed-buttons {
+      display: flex;
+      gap: 4px;
+    }
+
+    .btn-speed {
+      padding: 4px 8px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      background: white;
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      cursor: pointer;
+      color: var(--text-main);
+      transition: all 0.15s ease;
+    }
+
+    .btn-speed.active {
+      background: var(--accent-color);
+      color: white;
+      border-color: var(--accent-color);
+    }
+
+    /* Route Stop List */
+    .route-list-header {
+      font-size: 0.8rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      margin-bottom: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .route-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      max-height: 220px;
+      overflow-y: auto;
+      padding-right: 4px;
+    }
+
+    .route-item {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      padding: 7px 10px;
+      border-radius: 8px;
+      background: white;
+      border: 1px solid var(--border-color);
+      font-size: 0.8rem;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+
+    .route-item:hover {
+      border-color: var(--accent-color);
+      background: #eff6ff;
+    }
+
+    .route-item.active {
+      border-color: var(--accent-color);
+      background: #e0f2fe;
+      font-weight: 600;
+    }
+
+    .route-item.completed {
+      background: #f0fdf4;
+      border-color: #bbf7d0;
+    }
+
+    .route-item-badge {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      background: #e2e8f0;
+      color: var(--text-main);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.72rem;
+      font-weight: 700;
+      flex-shrink: 0;
+    }
+
+    .route-item.active .route-item-badge {
+      background: var(--accent-color);
+      color: white;
+    }
+
+    .route-item.completed .route-item-badge {
+      background: var(--success-color);
+      color: white;
+    }
+
+    .route-item-name {
+      flex: 1;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+
+    .route-item-icon {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      min-width: 16px;
+      text-align: center;
+    }
+
+    /* Footer Buttons */
+    .panel-footer {
+      padding: 12px 20px;
+      border-top: 1px solid var(--border-color);
+      display: flex;
+      justify-content: space-between;
+      gap: 8px;
+      background: #ffffff;
+      border-bottom-left-radius: 14px;
+      border-bottom-right-radius: 14px;
+    }
+
+    .btn-full {
+      width: 100%;
+    }
+
+    /* Alerts and Messages */
+    #error-banner {
+      display: none;
+      background: #fee2e2;
+      border: 1px solid #f87171;
+      color: #b91c1c;
+      padding: 10px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      margin-bottom: 12px;
+      line-height: 1.4;
+    }
+
+    #loading-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 0.82rem;
+      color: var(--accent-color);
+      margin-bottom: 12px;
+      font-weight: 500;
+    }
+
+    /* Map Custom Marker Icons */
+    .custom-map-pin {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      border-radius: 50%;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.35);
+      border: 2px solid #ffffff;
+      color: white;
+      transition: transform 0.2s ease;
+    }
+
+    .custom-map-pin:hover {
+      transform: scale(1.15);
+      z-index: 9999 !important;
+    }
+
+    .pin-start {
+      background: linear-gradient(135deg, #16a34a, #15803d);
+    }
+
+    .pin-end {
+      background: linear-gradient(135deg, #dc2626, #991b1b);
+    }
+
+    .pin-waypoint {
+      background: linear-gradient(135deg, #2563eb, #1d4ed8);
+    }
+
+    .pin-church {
+      background: linear-gradient(135deg, #7c3aed, #5b21b6);
+      box-shadow: 0 4px 12px rgba(124, 58, 237, 0.5);
+    }
+
+    /* Vehicle Marker */
+    .motorcade-vehicle-icon {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.45));
+      transition: transform 0.05s linear;
+      transform-origin: center center;
+    }
+
+    /* Responsive Design */
+    @media (max-width: 640px) {
+      #sidebar {
+        width: calc(100% - 24px);
+        left: 12px;
+        top: 12px;
+        max-height: 60%;
+      }
+
+      .controls-grid {
+        grid-template-columns: repeat(3, 1fr);
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <div id="app-container">
+    <!-- Map Canvas -->
+    <div id="map"></div>
+
+    <!-- UI Overlay Sidebar -->
+    <div id="sidebar">
+      <div class="panel-header">
+        <h1><i class="fa-solid fa-car-tunnel"></i> Motorcade Route Simulation</h1>
+        <p>Road-only closed loop route & live simulation</p>
+      </div>
+
+      <div class="panel-content">
+        <!-- Error Banner -->
+        <div id="error-banner"></div>
+
+        <!-- Loading State -->
+        <div id="loading-indicator">
+          <i class="fa-solid fa-circle-notch fa-spin"></i>
+          <span id="loading-text">Calculating drivable road network...</span>
+        </div>
+
+        <!-- Status Card -->
+        <div class="status-card">
+          <div class="status-row">
+            <span class="status-label">Current Location</span>
+            <span id="current-location-text" class="status-value highlight">Saint John Paul II Parish</span>
+          </div>
+          <div class="status-row">
+            <span class="status-label">Next Destination</span>
+            <span id="next-location-text" class="status-value">Sitio Antipolo Waiting Shed</span>
+          </div>
+          <div class="status-row" style="margin-top: 8px;">
+            <span class="status-label">Progress</span>
+            <span id="progress-count-text" class="status-value">0 / 8 segments</span>
+          </div>
+          <div class="progress-bar-container">
+            <div id="route-progress-bar" class="progress-bar-fill"></div>
+          </div>
+        </div>
+
+        <!-- Simulation Controls -->
+        <div class="controls-grid">
+          <button id="btn-play" class="btn btn-primary" disabled><i class="fa-solid fa-play"></i> Play</button>
+          <button id="btn-pause" class="btn btn-warning" disabled><i class="fa-solid fa-pause"></i> Pause</button>
+          <button id="btn-reset" class="btn btn-secondary" disabled><i class="fa-solid fa-rotate-left"></i>
+            Reset</button>
+        </div>
+
+        <!-- Speed Selector -->
+        <div class="speed-container">
+          <span class="speed-label"><i class="fa-solid fa-gauge-high"></i> Speed:</span>
+          <div class="speed-buttons">
+            <button class="btn-speed" data-speed="0.5">0.5×</button>
+            <button class="btn-speed active" data-speed="1">1×</button>
+            <button class="btn-speed" data-speed="2">2×</button>
+            <button class="btn-speed" data-speed="4">4×</button>
+            <button class="btn-speed" data-speed="8">8×</button>
+          </div>
+        </div>
+
+        <!-- Motorcade Route Checkpoints -->
+        <div class="route-list-header">
+          <span><i class="fa-solid fa-route"></i> Motorcade Route</span>
+          <span id="route-total-distance" style="font-size: 0.75rem; font-weight: normal; color: #4b5563;"></span>
+        </div>
+        <ul id="checkpoint-list" class="route-list">
+          <!-- Populated dynamically via JavaScript -->
+        </ul>
+      </div>
+
+      <div class="panel-footer">
+        <button id="btn-fit-bounds" class="btn btn-secondary btn-full"><i class="fa-solid fa-arrows-to-eye"></i> Reset
+          Map View</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Leaflet JavaScript -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <script>
+    // ==========================================
+    // ROUTE DATA
+    // ==========================================
+    // Dedicated coordinate for Saint John Paul II Parish building
+    const PARISH_CHURCH_COORDS = [14.250421697824766, 121.40054795022102];
+
+    // Strictly named locations only.
+    // Icons removed from START and END as requested.
+    const ROUTE_STOPS = [
+      {
+        id: "start",
+        orderNumber: 1,
+        name: "Saint John Paul II Parish (Start)",
+        role: "START",
+        coords: [14.250261205065213, 121.40080206518213], // [lat, lng]
+        iconClass: "", // Icon removed from Start
+        type: "start",
+        colorType: "pin-start"
+      },
+      {
+        id: "point-2",
+        orderNumber: 2,
+        name: "Sitio Antipolo Waiting Shed",
+        role: "CHECKPOINT",
+        coords: [14.247463032293862, 121.393187632915],
+        iconClass: "fa-solid fa-person-shelter",
+        type: "shelter",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-4",
+        orderNumber: 3,
+        name: "Metro Central Mall",
+        role: "CHECKPOINT",
+        coords: [14.25313280805668, 121.38828634058557],
+        iconClass: "fa-solid fa-cart-shopping",
+        type: "mall",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-5",
+        orderNumber: 4,
+        name: "Sambat Intersection",
+        role: "CHECKPOINT",
+        coords: [14.25896025289023, 121.39798226256303],
+        iconClass: "fa-solid fa-diamond-turn-right",
+        type: "intersection",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-6",
+        orderNumber: 5,
+        name: "Caltex Santa Cruz Highway",
+        role: "CHECKPOINT",
+        coords: [14.263504183621212, 121.40435486563177],
+        iconClass: "fa-solid fa-gas-pump",
+        type: "gas",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-7",
+        orderNumber: 6,
+        name: "SPX Express",
+        role: "CHECKPOINT",
+        coords: [14.262010956272363, 121.40396345700869],
+        iconClass: "fa-solid fa-box-open",
+        type: "package",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-11",
+        orderNumber: 7,
+        name: "Juliana Market",
+        role: "CHECKPOINT",
+        coords: [14.256463118917479, 121.39917543794093],
+        iconClass: "fa-solid fa-store",
+        type: "market",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "point-13",
+        orderNumber: 8,
+        name: "In Front of Casa Venice Resort",
+        role: "CHECKPOINT",
+        coords: [14.22049032798171, 121.39668832741532],
+        iconClass: "fa-solid fa-hotel",
+        type: "resort",
+        colorType: "pin-waypoint"
+      },
+      {
+        id: "end",
+        orderNumber: 9,
+        name: "Saint John Paul II Parish (End)",
+        role: "END",
+        coords: [14.250261205065213, 121.40080206518213],
+        iconClass: "", // Icon removed from Stop
+        type: "end",
+        colorType: "pin-end"
+      }
+    ];
+
+    // Clean through-road centerline points between SPX Express and Juliana Market
+    const CLEAN_THROUGH_ROAD_WAYPOINTS = [
+      [14.26000, 121.40130], // Road east of Argem Coliseum heading south
+      [14.25860, 121.40050]  // Road heading southwest past Angie towards the highway
+    ];
+
+    // ==========================================
+    // MAP INITIALIZATION
+    // ==========================================
+    const map = L.map("map", {
+      center: [14.250261, 121.400802],
+      zoom: 14,
+      zoomControl: false
+    });
+
+    L.control.zoom({ position: "bottomright" }).addTo(map);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+    }).addTo(map);
+
+    let routePolylineLayer = null;
+    let markersLayer = L.layerGroup().addTo(map);
+
+    // ==========================================
+    // ROAD ROUTING
+    // ==========================================
+    let fullRoadPath = [];
+    let segmentStopIndices = [];
+    let totalRouteDistanceMeters = 0;
+
+    function distanceInMeters(p1, p2) {
+      const dx = (p1[0] - p2[0]) * 111320;
+      const dy = (p1[1] - p2[1]) * 111320 * Math.cos((p1[0] * Math.PI) / 180);
+      return Math.sqrt(dx * dx + dy * dy);
+    }
+
+    /**
+     * Eliminates any out-and-back dead-end loops or spurs where a route enters a side
+     * street and doubles back to the same intersection area.
+     */
+    function removeDeadEndSpurs(points) {
+      if (!points || points.length < 5) return points;
+
+      let clean = [...points];
+      let foundSpur = true;
+
+      while (foundSpur) {
+        foundSpur = false;
+        for (let i = 0; i < clean.length - 3; i++) {
+          for (let j = i + 3; j < clean.length; j++) {
+            if (distanceInMeters(clean[i], clean[j]) < 45) {
+              let maxExcursion = 0;
+              for (let k = i + 1; k < j; k++) {
+                const d = distanceInMeters(clean[i], clean[k]);
+                if (d > maxExcursion) maxExcursion = d;
+              }
+              if (maxExcursion > 25) {
+                clean.splice(i + 1, j - i - 1);
+                foundSpur = true;
+                break;
+              }
+            }
+          }
+          if (foundSpur) break;
+        }
+      }
+      return clean;
+    }
+
+    async function fetchDrivingRoadSegment(fromCoords, toCoords, viaPoints = []) {
+      const allPoints = [fromCoords, ...viaPoints, toCoords];
+      const coordString = allPoints.map(p => `${p[1]},${p[0]}`).join(";");
+      const url = `https://router.project-osrm.org/route/v1/driving/${coordString}?overview=full&geometries=geojson&steps=false`;
+
+      const response = await fetch(url);
+      if (!response.ok) {
+        throw new Error(`OSRM HTTP status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      if (!data.routes || data.routes.length === 0 || !data.routes[0].geometry) {
+        throw new Error("No driving route available between points.");
+      }
+
+      const route = data.routes[0];
+      let pathPoints = route.geometry.coordinates.map(coord => [coord[1], coord[0]]);
+
+      pathPoints = removeDeadEndSpurs(pathPoints);
+
+      return {
+        points: pathPoints,
+        distance: route.distance,
+        duration: route.duration
+      };
+    }
+
+    async function generateFullMotorcadeRoute() {
+      const loadingEl = document.getElementById("loading-indicator");
+      const errorEl = document.getElementById("error-banner");
+
+      try {
+        loadingEl.style.display = "flex";
+        errorEl.style.display = "none";
+
+        fullRoadPath = [];
+        segmentStopIndices = [0];
+        totalRouteDistanceMeters = 0;
+
+        for (let i = 0; i < ROUTE_STOPS.length - 1; i++) {
+          const startStop = ROUTE_STOPS[i];
+          const endStop = ROUTE_STOPS[i + 1];
+
+          document.getElementById("loading-text").innerText =
+            `Routing road segment ${i + 1} of ${ROUTE_STOPS.length - 1}: ${startStop.name} → ${endStop.name}...`;
+
+          const via = (startStop.id === "point-7" && endStop.id === "point-11")
+            ? CLEAN_THROUGH_ROAD_WAYPOINTS
+            : [];
+
+          const segmentData = await fetchDrivingRoadSegment(startStop.coords, endStop.coords, via);
+
+          if (!segmentData.points || segmentData.points.length < 2) {
+            throw new Error(`Invalid road geometry returned between ${startStop.name} and ${endStop.name}`);
+          }
+
+          const ptsToAdd = (i === 0) ? segmentData.points : segmentData.points.slice(1);
+          fullRoadPath.push(...ptsToAdd);
+
+          totalRouteDistanceMeters += segmentData.distance;
+          segmentStopIndices.push(fullRoadPath.length - 1);
+        }
+
+        renderRouteOnMap();
+        fitMapToRoute();
+
+        const totalKm = (totalRouteDistanceMeters / 1000).toFixed(2);
+        document.getElementById("route-total-distance").innerText = `${totalKm} km`;
+
+        loadingEl.style.display = "none";
+        document.getElementById("btn-play").disabled = false;
+        document.getElementById("btn-reset").disabled = false;
+        initVehicleMarker();
+
+      } catch (err) {
+        console.error("Routing error:", err);
+        loadingEl.style.display = "none";
+        errorEl.style.display = "block";
+        errorEl.innerHTML = `
+          <strong><i class="fa-solid fa-triangle-exclamation"></i> Unable to calculate the road route.</strong><br>
+          Please check the routing service configuration or network connection. Straight-line fallback is prohibited.
+        `;
+      }
+    }
+
+    function renderRouteOnMap() {
+      if (routePolylineLayer) {
+        map.removeLayer(routePolylineLayer);
+      }
+
+      const outerGlow = L.polyline(fullRoadPath, {
+        color: "#1d4ed8",
+        weight: 7,
+        opacity: 0.9,
+        lineCap: "round",
+        lineJoin: "round"
+      });
+
+      const innerCore = L.polyline(fullRoadPath, {
+        color: "#60a5fa",
+        weight: 3,
+        opacity: 1,
+        lineCap: "round",
+        lineJoin: "round"
+      });
+
+      routePolylineLayer = L.layerGroup([outerGlow, innerCore]).addTo(map);
+    }
+
+    function fitMapToRoute() {
+      if (fullRoadPath.length > 0) {
+        const bounds = L.latLngBounds(fullRoadPath);
+        map.fitBounds(bounds, { padding: [60, 60] });
+      }
+    }
+
+    // ==========================================
+    // MARKERS
+    // ==========================================
+    function createCustomMarkerIcon(stop) {
+      let pinClass = stop.colorType;
+      const isStart = (stop.role === "START" || stop.role === "END");
+
+      // Icon removed for start and stop. Display a clean Start/Finish text badge.
+      const innerContent = isStart
+        ? `<span style="font-size: 10px; font-weight: 800; letter-spacing: -0.5px;">S/F</span>`
+        : `<i class="${stop.iconClass}"></i>`;
+
+      const iconHtml = `
+        <div class="custom-map-pin ${pinClass}" style="width: 30px; height: 30px; font-size: 12px;" title="${stop.name}">
+          ${innerContent}
+        </div>
+      `;
+
+      return L.divIcon({
+        className: "",
+        html: iconHtml,
+        iconSize: [30, 30],
+        iconAnchor: [15, 15],
+        popupAnchor: [0, -18]
+      });
+    }
+
+    function initMarkers() {
+      markersLayer.clearLayers();
+
+      // 1. Separate Landmark Marker for Saint John Paul II Parish with the Church Icon
+      const churchIcon = L.divIcon({
+        className: "",
+        html: `
+          <div class="custom-map-pin pin-church" style="width: 34px; height: 34px; font-size: 15px;" title="Saint John Paul II Parish">
+            <i class="fa-solid fa-church"></i>
+          </div>
+        `,
+        iconSize: [34, 34],
+        iconAnchor: [17, 17],
+        popupAnchor: [0, -20]
+      });
+
+      const churchMarker = L.marker(PARISH_CHURCH_COORDS, { icon: churchIcon }).addTo(markersLayer);
+      churchMarker.bindPopup(`
+        <div style="font-size: 13px; line-height: 1.4;">
+          <strong style="color: #6d28d9;"><i class="fa-solid fa-church"></i> Saint John Paul II Parish</strong><br>
+          <span style="font-weight: 500; color: #334155;">Parish Church Grounds</span><br>
+          <span style="color: #64748b; font-size: 11px;">[${PARISH_CHURCH_COORDS[0].toFixed(5)}, ${PARISH_CHURCH_COORDS[1].toFixed(5)}]</span>
+        </div>
+      `);
+
+      // 2. Checkpoint Markers on the Route
+      ROUTE_STOPS.forEach((stop, index) => {
+        if (index === ROUTE_STOPS.length - 1) return; // Skip duplicate end marker on identical coordinate
+
+        const isStart = (index === 0);
+        const icon = createCustomMarkerIcon(stop);
+        const marker = L.marker(stop.coords, { icon: icon }).addTo(markersLayer);
+
+        const popupContent = `
+          <div style="font-size: 13px; line-height: 1.4;">
+            <strong style="color: #1e3a8a;">${isStart ? "MOTORCADE START & FINISH" : "Checkpoint " + stop.orderNumber}</strong><br>
+            <span style="font-weight: 600;">${stop.name}</span><br>
+            <span style="color: #64748b; font-size: 11px;">[${stop.coords[0].toFixed(5)}, ${stop.coords[1].toFixed(5)}]</span>
+          </div>
+        `;
+        marker.bindPopup(popupContent);
+      });
+    }
+
+    function initSidebarCheckpoints() {
+      const listEl = document.getElementById("checkpoint-list");
+      listEl.innerHTML = "";
+
+      ROUTE_STOPS.forEach((stop, index) => {
+        const li = document.createElement("li");
+        li.className = `route-item ${index === 0 ? "active" : ""}`;
+        li.id = `checkpoint-item-${index}`;
+
+        let labelBadge = stop.orderNumber;
+        if (index === 0) labelBadge = "S";
+        if (index === ROUTE_STOPS.length - 1) labelBadge = "E";
+
+        // Display icon only for intermediate stops, no icon for Start and Stop
+        const iconHtml = stop.iconClass ? `<i class="${stop.iconClass}"></i>` : ``;
+
+        li.innerHTML = `
+          <div class="route-item-badge">${labelBadge}</div>
+          <div class="route-item-name">${stop.name}</div>
+          <div class="route-item-icon">${iconHtml}</div>
+        `;
+
+        li.addEventListener("click", () => {
+          map.setView(stop.coords, 16, { animate: true });
+        });
+
+        listEl.appendChild(li);
+      });
+    }
+
+    // ==========================================
+    // MOTORCADE VEHICLE
+    // ==========================================
+    let vehicleMarker = null;
+
+    function getVehicleIconSvg(bearing = 0) {
+      return `
+        <div class="motorcade-vehicle-icon" style="transform: rotate(${bearing}deg); width: 44px; height: 44px;">
+          <svg width="44" height="44" viewBox="0 0 100 100" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <ellipse cx="50" cy="52" rx="20" ry="34" fill="rgba(0,0,0,0.35)"/>
+            <rect x="33" y="16" width="34" height="68" rx="12" fill="#1e293b" stroke="#ffffff" stroke-width="3"/>
+            <path d="M 37 36 L 40 28 L 60 28 L 63 36 Z" fill="#38bdf8"/>
+            <path d="M 39 67 L 41 73 L 59 73 L 61 67 Z" fill="#38bdf8"/>
+            <rect x="38" y="38" width="24" height="27" rx="3" fill="#0f172a"/>
+            <rect x="39" y="47" width="10" height="7" rx="2" fill="#ef4444"/>
+            <rect x="51" y="47" width="10" height="7" rx="2" fill="#3b82f6"/>
+            <polygon points="36,18 42,18 40,14 36,14" fill="#fef08a"/>
+            <polygon points="64,18 58,18 60,14 64,14" fill="#fef08a"/>
+          </svg>
+        </div>
+      `;
+    }
+
+    function initVehicleMarker() {
+      if (vehicleMarker) {
+        map.removeLayer(vehicleMarker);
+      }
+
+      if (fullRoadPath.length === 0) return;
+
+      const initialBearing = calculateBearing(fullRoadPath[0], fullRoadPath[1]);
+      const initialIcon = L.divIcon({
+        className: "vehicle-marker-container",
+        html: getVehicleIconSvg(initialBearing),
+        iconSize: [44, 44],
+        iconAnchor: [22, 22]
+      });
+
+      vehicleMarker = L.marker(fullRoadPath[0], {
+        icon: initialIcon,
+        zIndexOffset: 1000
+      }).addTo(map);
+    }
+
+    function calculateBearing(p1, p2) {
+      if (!p1 || !p2) return 0;
+      const lat1 = (p1[0] * Math.PI) / 180;
+      const lon1 = (p1[1] * Math.PI) / 180;
+      const lat2 = (p2[0] * Math.PI) / 180;
+      const lon2 = (p2[1] * Math.PI) / 180;
+
+      const y = Math.sin(lon2 - lon1) * Math.cos(lat2);
+      const x = Math.cos(lat1) * Math.sin(lat2) - Math.sin(lat1) * Math.cos(lat2) * Math.cos(lon2 - lon1);
+      const brng = (Math.atan2(y, x) * 180) / Math.PI;
+      return (brng + 360) % 360;
+    }
+
+    // ==========================================
+    // VEHICLE ANIMATION
+    // ==========================================
+    let isPlaying = false;
+    let animRequest = null;
+    let currentPathIndex = 0;
+    let progressBetweenPoints = 0;
+    let simSpeedMultiplier = 1;
+    let lastTimestamp = 0;
+
+    function startSimulation() {
+      if (!isPlaying && fullRoadPath.length > 1) {
+        isPlaying = true;
+        document.getElementById("btn-play").disabled = true;
+        document.getElementById("btn-pause").disabled = false;
+        lastTimestamp = performance.now();
+        animRequest = requestAnimationFrame(simulationLoop);
+      }
+    }
+
+    function pauseSimulation() {
+      if (isPlaying) {
+        isPlaying = false;
+        document.getElementById("btn-play").disabled = false;
+        document.getElementById("btn-pause").disabled = true;
+        if (animRequest) {
+          cancelAnimationFrame(animRequest);
+        }
+      }
+    }
+
+    function resetSimulation() {
+      pauseSimulation();
+      currentPathIndex = 0;
+      progressBetweenPoints = 0;
+      updateVehiclePositionOnRoad(0, 0);
+      updateProgressUI(0);
+      document.getElementById("btn-play").disabled = false;
+      document.getElementById("btn-pause").disabled = true;
+    }
+
+    function simulationLoop(timestamp) {
+      if (!isPlaying) return;
+
+      const delta = (timestamp - lastTimestamp) / 1000;
+      lastTimestamp = timestamp;
+
+      const step = delta * 1.6 * simSpeedMultiplier;
+      progressBetweenPoints += step;
+
+      while (progressBetweenPoints >= 1.0) {
+        progressBetweenPoints -= 1.0;
+        currentPathIndex++;
+
+        if (currentPathIndex >= fullRoadPath.length - 1) {
+          currentPathIndex = fullRoadPath.length - 1;
+          progressBetweenPoints = 0;
+          updateVehiclePositionOnRoad(currentPathIndex, 0);
+          updateProgressUI(currentPathIndex);
+          pauseSimulation();
+          document.getElementById("btn-play").disabled = true;
+          return;
+        }
+      }
+
+      updateVehiclePositionOnRoad(currentPathIndex, progressBetweenPoints);
+      updateProgressUI(currentPathIndex);
+
+      animRequest = requestAnimationFrame(simulationLoop);
+    }
+
+    function updateVehiclePositionOnRoad(index, t) {
+      if (!fullRoadPath || fullRoadPath.length === 0 || !vehicleMarker) return;
+
+      const p1 = fullRoadPath[index];
+      const p2 = fullRoadPath[Math.min(index + 1, fullRoadPath.length - 1)];
+
+      const lat = p1[0] + (p2[0] - p1[0]) * t;
+      const lng = p1[1] + (p2[1] - p1[1]) * t;
+      const currentPos = [lat, lng];
+
+      const bearing = calculateBearing(p1, p2);
+
+      vehicleMarker.setLatLng(currentPos);
+      const iconEl = vehicleMarker.getElement();
+      if (iconEl) {
+        const vehicleDiv = iconEl.querySelector(".motorcade-vehicle-icon");
+        if (vehicleDiv) {
+          vehicleDiv.style.transform = `rotate(${bearing}deg)`;
+        }
+      }
+    }
+
+    // ==========================================
+    // SIMULATION CONTROLS
+    // ==========================================
+    document.getElementById("btn-play").addEventListener("click", startSimulation);
+    document.getElementById("btn-pause").addEventListener("click", pauseSimulation);
+    document.getElementById("btn-reset").addEventListener("click", resetSimulation);
+    document.getElementById("btn-fit-bounds").addEventListener("click", fitMapToRoute);
+
+    const speedButtons = document.querySelectorAll(".btn-speed");
+    speedButtons.forEach(btn => {
+      btn.addEventListener("click", () => {
+        speedButtons.forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        simSpeedMultiplier = parseFloat(btn.getAttribute("data-speed"));
+      });
+    });
+
+    // ==========================================
+    // PROGRESS TRACKING
+    // ==========================================
+    function updateProgressUI(currentVertexIndex) {
+      if (segmentStopIndices.length === 0) return;
+
+      let currentStopIndex = 0;
+      for (let i = 0; i < segmentStopIndices.length; i++) {
+        if (currentVertexIndex >= segmentStopIndices[i]) {
+          currentStopIndex = i;
+        } else {
+          break;
+        }
+      }
+
+      const nextStopIndex = Math.min(currentStopIndex + 1, ROUTE_STOPS.length - 1);
+
+      document.getElementById("current-location-text").innerText = ROUTE_STOPS[currentStopIndex].name;
+      document.getElementById("next-location-text").innerText =
+        (currentStopIndex === ROUTE_STOPS.length - 1) ? "Completed (Parish)" : ROUTE_STOPS[nextStopIndex].name;
+
+      const completedSegments = currentStopIndex;
+      const totalSegments = ROUTE_STOPS.length - 1;
+      document.getElementById("progress-count-text").innerText = `${completedSegments} / ${totalSegments} checkpoints`;
+
+      const progressPercent = (currentVertexIndex / (fullRoadPath.length - 1)) * 100;
+      document.getElementById("route-progress-bar").style.width = `${Math.min(100, progressPercent)}%`;
+
+      for (let i = 0; i < ROUTE_STOPS.length; i++) {
+        const itemEl = document.getElementById(`checkpoint-item-${i}`);
+        if (!itemEl) continue;
+
+        itemEl.classList.remove("active", "completed");
+        if (i < currentStopIndex) {
+          itemEl.classList.add("completed");
+        } else if (i === currentStopIndex) {
+          itemEl.classList.add("active");
+        }
+      }
+    }
+
+    // ==========================================
+    // INITIALIZATION RUNNER
+    // ==========================================
+    window.addEventListener("DOMContentLoaded", () => {
+      initMarkers();
+      initSidebarCheckpoints();
+      generateFullMotorcadeRoute();
+    });
+  </script>
+</body>
+
+</html>
